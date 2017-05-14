@@ -1,0 +1,163 @@
+==========
+ ruby-cdb
+==========
+
+This package provides Ruby interface to Dan Bernstein's cdb (constant
+database) library.  For the information about cdb itself, see library
+author's website http://cr.yp.to/cdb.html.
+
+
+ Installation Process
+======================
+
+ % tar xvzf ruby-cdb-x.y.tar.gz
+ % cd ruby-cdb
+ % more README
+ % (cd cdb; make)
+ % ruby extconf.rb
+ % make
+ % strip cdb.so  (optional)
+ % su root -c 'make site-install'
+
+done.
+
+
+ Note for Linux users
+======================
+
+If you are using Linux, you may encounter errors like this.
+
+  ./load cdbget cdb.a buffer.a unix.a byte.a 
+  cdb.a(cdb.o)(.text+0x11e):cdb.c: undefined reference to `_errno'
+  cdb.a(cdb.o)(.text+0x19b):cdb.c: undefined reference to `_errno'
+
+If this is your case, try adding gcc -include option.
+
+  % echo gcc -O2 -include /usr/include/errno.h > cdb/conf-cc
+  % (cd cdb; make)
+
+See following URLs for details.
+
+  http://cr.yp.to/docs/unixport.html#errno
+  http://www.thedjbway.org/errno.html
+
+
+ Reporting Bugs
+================
+
+If you find bugs, please contact <okahashi@gmail.com>.
+
+
+ Usage
+=======
+
+* class CDB
+  
+  obj = CDB.new(file)
+     open file and setup it as a CDB object.
+  
+  CDB.open(file) {|obj| .. }
+     same as:
+  
+     obj = CDB.new(file)
+     begin
+       ..
+     ensure
+       obj.close
+     end
+  
+  CDB.each(file) {|key, data| .. }
+     same as:
+  
+     CDB.open(file) {|obj|
+       obj.each {|key, data|
+         ..
+       }
+     }
+  
+  CDB.each(file, key) {|data| .. }
+     same as:
+  
+     CDB.open(file) {|obj|
+       obj.each(key) {|data|
+         ..
+       }
+     }
+
+  CDB.create(file, tmp, mode = 0644) {|obj| .. }
+     same as:
+     
+     CDBMake.open(tmp, mode) {|obj|
+       ..
+     }
+     File.rename(tmp, file)
+
+  CDB.edit(file, tmp, mode = nil) {|ary| .. }
+     open and read file <file>, yield block with an associative array
+     <ary>, write updated <ary> to <tmp> as cdb, and rename <tmp> to
+     <file>.  (<ary> = [ [key, data], [key, data] .. ])
+     If <mode> is unspecified, File.stat(file).mode is used.
+
+     Note that in case <file> contains a large amount of data, they
+     are all read into memory (<ary>).  If this is not preferable,
+     using CDB.update or class CDBMake directly is recommended.
+
+  CDB.update(file, tmp, mode = nil) {|read, write| .. }
+     same as:
+
+     CDB.open(file) {|read|
+       CDBMake.open(tmp, mode) {|write|
+         ..
+       }
+     }
+     File.rename(tmp, file)
+
+     If <mode> is unspecified, File.stat(file).mode is used.
+
+  CDB.dump(file)
+     dump cdb data in cdbdump(1) format.
+  
+  obj.find(key)
+  obj[key]
+     return the first data associated with <key>.
+  
+  obj.each {|key, data| .. }
+     iterate over data in whole database.
+  
+  obj.each(key) {|data| .. }
+     iterate over data associated with <key>.
+  
+  obj.close
+     unmmap and close file.
+  
+  obj.read(pos, len)
+     read <len> bytes from the byte position <pos> in the database.
+     Since file size check is not performed for now, too large arguments
+     may cause segmentation fault.
+  
+  
+  
+* class CDBMake
+  
+  obj = CDBMake.new(file, mode = 0644)
+    open write-only file <file>.  <mode> is passed to open(2).
+
+  CDBMake.open(file, mode = 0644) {|obj| .. }
+    same as:
+
+    obj = CDBMake.new(file, mode)
+    begin
+      ..
+    ensure
+      obj.finish
+    end
+  
+  obj.add(key, data)
+  obj[key] = data
+    store <data> under <key> in the database.  Note that multiple
+    calls with the same <key> DO NOT override former data.
+
+  obj.finish
+    sync added data to the disk and close file.
+
+
